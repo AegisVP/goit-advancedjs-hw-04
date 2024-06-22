@@ -9,8 +9,15 @@ const DEBOUNCE_DELAY = 250;
 const refs = {
   searchForm: document.querySelector('form#search-form'),
   gallery: document.querySelector('.gallery'),
+  observerSentry: document.querySelector('.gallery__sentry'),
   loadingImg: document.querySelector('.gallery__loading'),
   searchQuery: document.querySelector('form > input[name="searchQuery"]'),
+};
+
+const observerOptions = {
+  root: null,
+  rootMargin: '0px 0px 300px 0px',
+  threshold: 1,
 };
 
 let page = null;
@@ -18,18 +25,12 @@ let perPage = 40;
 let searchQuery = null;
 let myGalleryLightbox = null;
 
-const doScrollMonitor = debounce(() => {
-  const nr = { ...refs, lastImage: refs.gallery.lastChild };
-  const bounding = nr.lastImage?.getBoundingClientRect();
-  const imgHeight = nr.lastImage?.offsetHeight;
-
-  if (
-    bounding.top >= -imgHeight &&
-    bounding.bottom <=
-      (window.innerHeight || document.documentElement.clientHeight) + imgHeight
-  ) {
-    getPictures(searchQuery);
-  }
+const onObserverCall = debounce(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      getPictures(searchQuery);
+    }
+  });
 }, DEBOUNCE_DELAY);
 
 const onSearchSubmit = e => {
@@ -38,6 +39,8 @@ const onSearchSubmit = e => {
   searchQuery = e.currentTarget.searchQuery.value
     .replaceAll(new RegExp(/>|</, 'g'), '')
     .trim();
+
+  clearGallery();
   getPictures(searchQuery);
 };
 
@@ -57,11 +60,11 @@ const formSearchQueryUrl = q => {
 const getPictures = async (q = '') => {
   if (q === '' || q.length > 100) {
     Notify.failure('Invalid query');
+
     clearGallery();
     return;
   }
 
-  console.log({ searchQuery, page });
   try {
     showLoadingAnimation(true);
     const response = await axios.get(formSearchQueryUrl(q));
@@ -84,21 +87,19 @@ const getPictures = async (q = '') => {
       Notify.failure(
         'Sorry, there are no images matching your search query. Please try again.'
       );
+
+      clearGallery();
     }
   } catch (error) {
-    console.error(error);
-
     clearGallery();
     Notify.failure('Error searching');
+    Notify.failure(error.message);
+    showLoadingAnimation(false);
   }
 };
 
 const showResults = ({ hits: results, totalHits }) => {
-  if (page * perPage >= totalHits) {
-    reachedEndOfList();
-  } else {
-    window.addEventListener('scroll', doScrollMonitor);
-  }
+  observer.unobserve(refs.observerSentry);
 
   refs.gallery.insertAdjacentHTML(
     'beforeend',
@@ -137,6 +138,12 @@ const showResults = ({ hits: results, totalHits }) => {
       )
       .join('')
   );
+
+  if (page * perPage >= totalHits) {
+    reachedEndOfList();
+  } else {
+    observer.observe(refs.observerSentry);
+  }
 };
 
 const showLoadingAnimation = (show = true) => {
@@ -145,16 +152,16 @@ const showLoadingAnimation = (show = true) => {
 };
 
 const clearGallery = () => {
+  observer.unobserve(refs.observerSentry);
+
   refs.gallery.innerHTML = '';
   refs.searchQuery.focus();
-
-  window.removeEventListener('scroll', doScrollMonitor);
 };
 
 const reachedEndOfList = () => {
   Notify.info("You've reached the end of search results");
-
-  window.removeEventListener('scroll', doScrollMonitor);
+  observer.unobserve(refs.observerSentry);
 };
 
 refs.searchForm.addEventListener('submit', onSearchSubmit);
+const observer = new IntersectionObserver(onObserverCall, observerOptions);
