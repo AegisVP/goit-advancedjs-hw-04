@@ -21,7 +21,7 @@ const observerOptions = {
 };
 
 let page = null;
-let perPage = 40;
+const perPage = 20;
 let searchQuery = null;
 let myGalleryLightbox = null;
 
@@ -37,9 +37,14 @@ const onSearchSubmit = e => {
   e.preventDefault();
   page = 1;
   searchQuery = e.currentTarget.searchQuery.value
-    .replaceAll(new RegExp(/>|</, 'g'), '')
+    .replaceAll('<', '')
+    .replaceAll('>', '')
+    .replaceAll('\\', '')
+    .replaceAll('/', '')
+    .replaceAll('|', '')
     .trim();
 
+  console.log({ searchQuery });
   clearGallery();
   getPictures(searchQuery);
 };
